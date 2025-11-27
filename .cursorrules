@@ -1,0 +1,94 @@
+# SaaS Boilerplate - Cursor Rules
+
+## Architecture Rules
+
+### File Size
+- Maximum 300 lines per file
+- If a file exceeds this limit, split it into smaller modules
+
+### Component Structure
+- One main component per file
+- Always define TypeScript interfaces for props
+- Use named exports for components
+- Use 'use client' directive only when necessary
+
+### Naming Conventions
+- Components: PascalCase (UserProfile.tsx)
+- Hooks: camelCase with 'use' prefix (useAuth.ts)
+- Utils: camelCase (formatDate.ts)
+- Constants: SCREAMING_SNAKE_CASE (MAX_FILE_SIZE)
+
+### Import Order
+1. React/Next imports
+2. Third-party imports
+3. Internal imports (absolute paths with @/)
+4. Types
+5. Styles
+
+### Styling
+- Use Tailwind CSS exclusively
+- Use cn() utility for conditional classes
+- Support both light and dark modes
+- Use CSS variables for theming
+
+### Internationalization
+- All user-facing text must be translated
+- Use useTranslations() hook
+- Support at minimum: English (en), German (de)
+
+### TypeScript
+- Strict mode enabled
+- No 'any' types
+- Use interfaces over types for objects
+- Always type function parameters and returns
+
+### Testing
+- Components should be testable
+- Avoid side effects in render
+
+### Accessibility
+- Use semantic HTML
+- Include aria labels where needed
+- Ensure keyboard navigation works
+
+## Code Quality Checklist
+- [ ] No linter errors
+- [ ] No TypeScript errors
+- [ ] File under 300 lines
+- [ ] Props interface defined
+- [ ] Translations added
+- [ ] Dark mode works
+- [ ] Mobile responsive
+
+## Folder Structure
+```
+app/           - Next.js App Router pages
+components/    - React components by feature
+lib/           - Utilities, hooks, services
+types/         - TypeScript definitions
+database/      - Database schema
+```
+
+## Component Template
+```tsx
+/**
+ * ComponentName
+ * Brief description.
+ */
+
+import { cn } from '@/lib/utils';
+
+interface ComponentNameProps {
+  propName: string;
+  className?: string;
+}
+
+export function ComponentName({ propName, className }: ComponentNameProps) {
+  return (
+    <div className={cn('base-styles', className)}>
+      {/* JSX */}
+    </div>
+  );
+}
+```
+
