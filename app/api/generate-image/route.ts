@@ -13,6 +13,8 @@ export const maxDuration = 60; // 60 Sekunden Timeout für Vercel
 
 interface RequestBody {
   backgroundImage: string;
+  backgroundWidth?: number;
+  backgroundHeight?: number;
   personMarkers?: PersonMarker[];
   prompt?: string;
   referenceImages?: string[];
@@ -82,6 +84,8 @@ export async function POST(request: NextRequest) {
     const result = await generateImageWithPersons(
       {
         backgroundImage: body.backgroundImage,
+        backgroundWidth: body.backgroundWidth,
+        backgroundHeight: body.backgroundHeight,
         personMarkers: body.personMarkers,
         prompt: body.prompt,
         imageQuality: body.imageQuality || '2K'

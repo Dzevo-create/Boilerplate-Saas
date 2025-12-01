@@ -31,6 +31,7 @@ interface GeneratedResult {
 export function PersonaEditor() {
   // State
   const [backgroundImage, setBackgroundImage] = useState<string | null>(null);
+  const [backgroundSize, setBackgroundSize] = useState<{ width: number; height: number } | null>(null);
   const [markers, setMarkers] = useState<CanvasMarker[]>([]);
   const [selectedMarkerId, setSelectedMarkerId] = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -39,14 +40,24 @@ export function PersonaEditor() {
   const [error, setError] = useState<string | null>(null);
   const [imageQuality, setImageQuality] = useState<'2K' | '4K'>('2K');
 
-  // Background Image Handler
+  // Background Image Handler - ermittelt auch die Bildgröße
   const handleBackgroundUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     const reader = new FileReader();
     reader.onload = (event) => {
-      setBackgroundImage(event.target?.result as string);
+      const dataUrl = event.target?.result as string;
+      
+      // Bildgröße ermitteln
+      const img = new Image();
+      img.onload = () => {
+        setBackgroundSize({ width: img.width, height: img.height });
+        console.log(`Background image size: ${img.width}x${img.height}`);
+      };
+      img.src = dataUrl;
+      
+      setBackgroundImage(dataUrl);
       setMarkers([]);
       setResult(null);
     };
@@ -82,6 +93,10 @@ export function PersonaEditor() {
     handleUpdateMarker(markerId, { personImage: undefined });
   }, [handleUpdateMarker]);
 
+  const handleUpdatePrompt = useCallback((markerId: string, prompt: string) => {
+    handleUpdateMarker(markerId, { customPrompt: prompt });
+  }, [handleUpdateMarker]);
+
   // Clear All
   const handleClearAll = useCallback(() => {
     setBackgroundImage(null);
@@ -112,6 +127,8 @@ export function PersonaEditor() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           backgroundImage,
+          backgroundWidth: backgroundSize?.width,
+          backgroundHeight: backgroundSize?.height,
           personMarkers: markers.map(m => ({
             id: m.id,
             x: m.x,
@@ -119,7 +136,8 @@ export function PersonaEditor() {
             width: m.width,
             height: m.height,
             personImageBase64: m.personImage,
-            label: m.label
+            label: m.label,
+            customPrompt: m.customPrompt
           })),
           imageQuality
         })
@@ -301,6 +319,7 @@ export function PersonaEditor() {
               markers={markers}
               onAssignPerson={handleAssignPerson}
               onRemovePersonImage={handleRemovePersonImage}
+              onUpdatePrompt={handleUpdatePrompt}
             />
 
             {/* Instructions */}

@@ -11,6 +11,7 @@ export interface CanvasMarker {
   personImage?: string; // Base64 or URL
   label: string;
   color: string;
+  customPrompt?: string; // z.B. "sitzend", "lächelnd", "mit Laptop"
 }
 
 export interface EditorState {

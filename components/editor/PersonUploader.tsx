@@ -8,20 +8,23 @@
 
 import { useCallback, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Upload, X, User, Plus, Image as ImageIcon } from 'lucide-react';
+import { Upload, X, User, Plus, Image as ImageIcon, MessageSquare } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { CanvasMarker, getMarkerColor } from './types';
 
 interface PersonUploaderProps {
   markers: CanvasMarker[];
   onAssignPerson: (markerId: string, imageData: string) => void;
   onRemovePersonImage: (markerId: string) => void;
+  onUpdatePrompt: (markerId: string, prompt: string) => void;
 }
 
 export function PersonUploader({
   markers,
   onAssignPerson,
-  onRemovePersonImage
+  onRemovePersonImage,
+  onUpdatePrompt
 }: PersonUploaderProps) {
   const [dragOverMarkerId, setDragOverMarkerId] = useState<string | null>(null);
 
@@ -119,7 +122,7 @@ export function PersonUploader({
               </div>
 
               {/* Content */}
-              <div className="p-3">
+              <div className="p-3 space-y-3">
                 {marker.personImage ? (
                   <div className="relative group">
                     <img
@@ -175,6 +178,17 @@ export function PersonUploader({
                     />
                   </label>
                 )}
+
+                {/* Custom Prompt Input */}
+                <div className="relative">
+                  <MessageSquare className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <Input
+                    placeholder="z.B. sitzend, lächelnd, mit Laptop..."
+                    value={marker.customPrompt || ''}
+                    onChange={(e) => onUpdatePrompt(marker.id, e.target.value)}
+                    className="pl-9 text-sm"
+                  />
+                </div>
               </div>
             </motion.div>
           ))}

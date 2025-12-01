@@ -12,10 +12,13 @@ export interface PersonMarker {
   personImageBase64?: string;
   personImageUrl?: string;
   label: string;
+  customPrompt?: string; // z.B. "sitzend", "lächelnd", "mit Laptop", etc.
 }
 
 export interface GenerateImageParams {
   backgroundImage: string; // Base64 oder URL
+  backgroundWidth?: number; // Breite des Hintergrundbildes in Pixel
+  backgroundHeight?: number; // Höhe des Hintergrundbildes in Pixel
   personMarkers: PersonMarker[];
   prompt?: string;
   imageQuality?: '2K' | '4K';
