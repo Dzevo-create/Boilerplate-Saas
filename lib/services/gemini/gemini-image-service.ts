@@ -49,47 +49,85 @@ function detectMimeType(base64OrUrl: string): string {
 
 /**
  * Baut den Prompt für die Personenplatzierung
+ * Mit präzisen Koordinaten und Face Preservation
  */
 function buildPersonPlacementPrompt(markers: PersonMarker[]): string {
+  const totalPersons = markers.length;
+  
+  // Detaillierte Beschreibung für jede Person mit exakten Koordinaten
   const markerDescriptions = markers.map((marker, index) => {
-    const positionDesc = getPositionDescription(marker);
-    return `Person ${index + 1} (${marker.label}): Place at ${positionDesc}`;
+    const imageNumber = index + 2; // +2 weil Bild 1 das Hintergrundbild ist
+    const xPercent = Math.round(marker.x * 100);
+    const yPercent = Math.round(marker.y * 100);
+    const widthPercent = Math.round(marker.width * 100);
+    const heightPercent = Math.round(marker.height * 100);
+    
+    return `
+PERSON ${index + 1} (Reference: Image ${imageNumber} - the ${getOrdinal(imageNumber)} image provided):
+- EXACT POSITION: Place person's center at ${xPercent}% from left edge, ${yPercent}% from top edge
+- BOUNDING BOX: Person should fill approximately ${widthPercent}% width × ${heightPercent}% height of the image
+- FACE: MUST be 100% IDENTICAL to Image ${imageNumber} - copy EXACT facial features`;
   }).join('\n');
 
   return `
-####### ABSOLUTE PRIORITY - FACE PRESERVATION #######
-THIS IS THE MOST IMPORTANT REQUIREMENT - DO NOT IGNORE:
-- Each person's face MUST be 100% IDENTICAL to their reference image
-- COPY the EXACT face from each reference: eyes, nose, mouth, chin, cheekbones, skin texture
-- Each person MUST be RECOGNIZABLE as the SAME PERSON from their reference
-- DO NOT modify, beautify, or alter ANY facial features
-- DO NOT change eye shape, eye color, nose shape, mouth shape, or face structure
-- ONLY the expression can change slightly - NOT the actual facial features
-################################################
+###############################################################
+###### CRITICAL INSTRUCTION - FACE PRESERVATION ######
+###############################################################
 
-TASK: Place the following people into the background scene image:
+THIS IS THE HIGHEST PRIORITY - VIOLATION IS NOT ACCEPTABLE:
 
+For EACH person being placed:
+- The face MUST be 100% IDENTICAL to their reference image
+- COPY the EXACT face: eyes, nose, mouth, chin, jawline, cheekbones, skin texture, skin color
+- The person MUST be IMMEDIATELY RECOGNIZABLE as the same person
+- DO NOT modify, beautify, smooth, or alter ANY facial features
+- DO NOT change: eye shape, eye color, nose shape, lip shape, face structure, skin tone
+- Keep natural skin texture - no airbrushing or smoothing
+- Expression may change slightly, but facial STRUCTURE must be IDENTICAL
+
+###############################################################
+
+TASK: Create a photorealistic composite image
+
+INPUT IMAGES:
+- Image 1 (FIRST image): Background/Scene - this is where people will be placed
+${markers.map((_, i) => `- Image ${i + 2} (${getOrdinal(i + 2)} image): Reference photo for Person ${i + 1}`).join('\n')}
+
+PLACEMENT INSTRUCTIONS:
 ${markerDescriptions}
 
-REQUIREMENTS:
-1. PRESERVE the exact background scene - do not alter the environment
-2. Place each person naturally at their designated position
-3. Match lighting and shadows to the scene
-4. Ensure proper scale relative to the environment
-5. Create natural poses that fit the scene context
-6. Each person should look like they belong in the scene
+COMPOSITION REQUIREMENTS:
+1. KEEP the background scene (Image 1) EXACTLY as provided - do not alter it
+2. Place ${totalPersons} ${totalPersons === 1 ? 'person' : 'people'} at their EXACT specified positions
+3. Each person's face MUST match their reference image PERFECTLY
+4. Scale each person to fit their designated bounding box naturally
+5. Match lighting, shadows, and color temperature to the background scene
+6. Ensure natural integration - people should look like they belong in the scene
+7. Full body or appropriate crop based on the bounding box size
 
-OUTPUT: A photorealistic image with all persons naturally integrated into the background scene.
-High fidelity, natural lighting, seamless integration, professional quality.
+OUTPUT: Single photorealistic image with ${totalPersons} ${totalPersons === 1 ? 'person' : 'people'} naturally composited into the background.
+Each person's identity must be preserved 100% - they must be recognizable.
+Professional quality, seamless integration, natural lighting.
 `;
 }
 
 /**
- * Beschreibt die Position eines Markers
+ * Gibt die Ordnungszahl zurück (1st, 2nd, 3rd, etc.)
+ */
+function getOrdinal(n: number): string {
+  const suffixes = ['th', 'st', 'nd', 'rd'];
+  const v = n % 100;
+  return n + (suffixes[(v - 20) % 10] || suffixes[v] || suffixes[0]);
+}
+
+/**
+ * Beschreibt die Position eines Markers detailliert
  */
 function getPositionDescription(marker: PersonMarker): string {
   const xPercent = Math.round(marker.x * 100);
   const yPercent = Math.round(marker.y * 100);
+  const widthPercent = Math.round(marker.width * 100);
+  const heightPercent = Math.round(marker.height * 100);
   
   let horizontal = 'center';
   if (xPercent < 33) horizontal = 'left side';
@@ -99,7 +137,7 @@ function getPositionDescription(marker: PersonMarker): string {
   if (yPercent < 33) vertical = 'top';
   else if (yPercent > 66) vertical = 'bottom';
   
-  return `${vertical} ${horizontal} of the image (approximately ${xPercent}% from left, ${yPercent}% from top)`;
+  return `${vertical} ${horizontal} (X: ${xPercent}%, Y: ${yPercent}%, Size: ${widthPercent}% × ${heightPercent}%)`;
 }
 
 /**
@@ -126,14 +164,19 @@ export async function generateImageWithPersons(
   const { imageQuality = '2K' } = params;
   
   try {
-    // Parts Array aufbauen
+    // Parts Array aufbauen - REIHENFOLGE IST WICHTIG!
+    // 1. Prompt (Text)
+    // 2. Hintergrundbild (Image 1 im Prompt)
+    // 3. Person 1 Bild (Image 2 im Prompt)
+    // 4. Person 2 Bild (Image 3 im Prompt)
+    // usw.
     const parts: GeminiRequestPart[] = [];
     
-    // 1. Prompt hinzufügen
+    // 1. Prompt hinzufügen - beschreibt welches Bild was ist
     const prompt = params.prompt || buildPersonPlacementPrompt(params.personMarkers);
     parts.push({ text: prompt });
     
-    // 2. Hintergrundbild hinzufügen
+    // 2. Hintergrundbild hinzufügen (= Image 1 im Prompt)
     const backgroundBase64 = await urlToBase64(params.backgroundImage);
     const backgroundMimeType = detectMimeType(params.backgroundImage);
     parts.push({
@@ -143,8 +186,10 @@ export async function generateImageWithPersons(
       }
     });
     
-    // 3. Personenbilder hinzufügen
-    for (const marker of params.personMarkers) {
+    // 3. Personenbilder hinzufügen (= Image 2, 3, 4... im Prompt)
+    // Reihenfolge entspricht der Marker-Reihenfolge!
+    for (let i = 0; i < params.personMarkers.length; i++) {
+      const marker = params.personMarkers[i];
       const personImage = marker.personImageBase64 || marker.personImageUrl;
       if (personImage) {
         const personBase64 = await urlToBase64(personImage);
@@ -155,8 +200,11 @@ export async function generateImageWithPersons(
             data: personBase64
           }
         });
+        console.log(`Added person ${i + 1} image as Image ${i + 2} at position (${Math.round(marker.x * 100)}%, ${Math.round(marker.y * 100)}%)`);
       }
     }
+    
+    console.log(`Total images: 1 background + ${params.personMarkers.length} persons = ${parts.length - 1} images`);
 
     // API Request
     const apiUrl = `${API_BASE}/models/${IMAGE_MODEL_ID}:generateContent?key=${apiKey}`;
