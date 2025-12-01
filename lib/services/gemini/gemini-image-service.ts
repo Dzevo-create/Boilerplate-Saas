@@ -18,76 +18,127 @@ const IMAGE_MODEL_ID = 'gemini-3-pro-image-preview';
 const API_BASE = 'https://generativelanguage.googleapis.com/v1beta';
 
 /**
- * Resized ein Base64 Bild auf das Ziel-Aspect-Ratio
- * Verwendet Center-Crop und dann Resize
+ * Padded ein Bild auf 1:1 Format (quadratisch)
+ * Gibt das gepadddete Bild und die Crop-Informationen zurück
  */
-async function resizeImageToAspectRatio(
-  imageBase64: string,
-  targetWidth: number,
-  targetHeight: number
+async function padToSquare(
+  imageBase64: string
+): Promise<{ 
+  paddedBase64: string; 
+  originalWidth: number;
+  originalHeight: number;
+  squareSize: number;
+  padLeft: number;
+  padTop: number;
+}> {
+  const inputBuffer = Buffer.from(imageBase64, 'base64');
+  const meta = await sharp(inputBuffer).metadata();
+  const width = meta.width || 1024;
+  const height = meta.height || 1024;
+  
+  // Quadratgröße = längste Seite
+  const squareSize = Math.max(width, height);
+  
+  // Padding berechnen
+  const padLeft = Math.round((squareSize - width) / 2);
+  const padTop = Math.round((squareSize - height) / 2);
+  
+  console.log(`Padding ${width}x${height} to ${squareSize}x${squareSize} (pad: ${padLeft}, ${padTop})`);
+  
+  // Bild auf Quadrat erweitern mit schwarzem Hintergrund
+  const paddedBuffer = await sharp(inputBuffer)
+    .extend({
+      top: padTop,
+      bottom: squareSize - height - padTop,
+      left: padLeft,
+      right: squareSize - width - padLeft,
+      background: { r: 0, g: 0, b: 0, alpha: 1 }
+    })
+    .jpeg({ quality: 95 })
+    .toBuffer();
+  
+  return {
+    paddedBase64: paddedBuffer.toString('base64'),
+    originalWidth: width,
+    originalHeight: height,
+    squareSize,
+    padLeft,
+    padTop
+  };
+}
+
+/**
+ * Entfernt das Padding und stellt das Original-Format wieder her
+ */
+async function cropFromSquare(
+  squareImageBase64: string,
+  originalWidth: number,
+  originalHeight: number,
+  padLeft: number,
+  padTop: number
 ): Promise<{ base64: string; mimeType: string }> {
-  try {
-    const inputBuffer = Buffer.from(imageBase64, 'base64');
+  const inputBuffer = Buffer.from(squareImageBase64, 'base64');
+  const meta = await sharp(inputBuffer).metadata();
+  const squareSize = meta.width || 1024;
+  
+  // Skalierungsfaktor berechnen (falls Gemini die Größe geändert hat)
+  const scale = squareSize / Math.max(originalWidth, originalHeight);
+  
+  // Skalierte Crop-Parameter
+  const scaledLeft = Math.round(padLeft * scale);
+  const scaledTop = Math.round(padTop * scale);
+  const scaledWidth = Math.round(originalWidth * scale);
+  const scaledHeight = Math.round(originalHeight * scale);
+  
+  console.log(`Cropping from ${squareSize}x${squareSize} to ${scaledWidth}x${scaledHeight}`);
+  
+  const croppedBuffer = await sharp(inputBuffer)
+    .extract({
+      left: scaledLeft,
+      top: scaledTop,
+      width: Math.min(scaledWidth, squareSize - scaledLeft),
+      height: Math.min(scaledHeight, squareSize - scaledTop)
+    })
+    .jpeg({ quality: 95 })
+    .toBuffer();
+  
+  return {
+    base64: croppedBuffer.toString('base64'),
+    mimeType: 'image/jpeg'
+  };
+}
+
+/**
+ * Passt Marker-Positionen für das gepadddete quadratische Bild an
+ */
+function adjustMarkersForPadding(
+  markers: PersonMarker[],
+  originalWidth: number,
+  originalHeight: number,
+  squareSize: number,
+  padLeft: number,
+  padTop: number
+): PersonMarker[] {
+  return markers.map(marker => {
+    // Konvertiere von relativen Koordinaten (0-1) zu absoluten Pixeln
+    const absX = marker.x * originalWidth;
+    const absY = marker.y * originalHeight;
+    const absWidth = marker.width * originalWidth;
+    const absHeight = marker.height * originalHeight;
     
-    // Hole die Dimensionen des Input-Bildes
-    const metadata = await sharp(inputBuffer).metadata();
-    const inputWidth = metadata.width || 1024;
-    const inputHeight = metadata.height || 1024;
+    // Verschiebe um Padding
+    const newAbsX = absX + padLeft;
+    const newAbsY = absY + padTop;
     
-    console.log(`Input image: ${inputWidth}x${inputHeight}`);
-    console.log(`Target: ${targetWidth}x${targetHeight}`);
-    
-    const inputRatio = inputWidth / inputHeight;
-    const targetRatio = targetWidth / targetHeight;
-    
-    let processedBuffer: Buffer;
-    
-    if (Math.abs(inputRatio - targetRatio) < 0.01) {
-      // Aspect Ratios sind gleich - nur resizen
-      processedBuffer = await sharp(inputBuffer)
-        .resize(targetWidth, targetHeight, { fit: 'fill' })
-        .jpeg({ quality: 95 })
-        .toBuffer();
-    } else {
-      // Aspect Ratios unterschiedlich - erst croppen dann resizen
-      let cropWidth: number, cropHeight: number;
-      
-      if (inputRatio > targetRatio) {
-        // Input ist breiter als Target - von den Seiten croppen
-        cropHeight = inputHeight;
-        cropWidth = Math.round(inputHeight * targetRatio);
-      } else {
-        // Input ist höher als Target - von oben/unten croppen
-        cropWidth = inputWidth;
-        cropHeight = Math.round(inputWidth / targetRatio);
-      }
-      
-      console.log(`Cropping to: ${cropWidth}x${cropHeight}`);
-      
-      // Center crop dann resize
-      processedBuffer = await sharp(inputBuffer)
-        .extract({
-          left: Math.round((inputWidth - cropWidth) / 2),
-          top: Math.round((inputHeight - cropHeight) / 2),
-          width: cropWidth,
-          height: cropHeight
-        })
-        .resize(targetWidth, targetHeight, { fit: 'fill' })
-        .jpeg({ quality: 95 })
-        .toBuffer();
-    }
-    
-    console.log(`Output image resized to target aspect ratio`);
-    
+    // Konvertiere zurück zu relativen Koordinaten für das quadratische Bild
     return {
-      base64: processedBuffer.toString('base64'),
-      mimeType: 'image/jpeg'
+      ...marker,
+      x: newAbsX / squareSize,
+      y: newAbsY / squareSize,
+      width: absWidth / squareSize,
+      height: absHeight / squareSize
     };
-  } catch (error) {
-    console.error('Resize failed:', error);
-    // Bei Fehler: Original zurückgeben
-    return { base64: imageBase64, mimeType: 'image/jpeg' };
-  }
+  });
 }
 
 /**
@@ -430,31 +481,58 @@ export async function generateImageWithPersons(
   const { imageQuality = '2K', backgroundWidth, backgroundHeight } = params;
   
   try {
+    // ============================================
+    // SCHRITT 0: Hintergrund auf 1:1 padden
+    // ============================================
+    const originalBackgroundBase64 = await urlToBase64(params.backgroundImage);
+    
+    // Padde den Hintergrund auf quadratisches Format
+    const paddingInfo = await padToSquare(originalBackgroundBase64);
+    const { 
+      paddedBase64: paddedBackgroundBase64, 
+      originalWidth: origW, 
+      originalHeight: origH,
+      squareSize,
+      padLeft,
+      padTop 
+    } = paddingInfo;
+    
+    console.log(`Background padded: ${origW}x${origH} → ${squareSize}x${squareSize}`);
+    
+    // Passe die Marker-Positionen für das quadratische Bild an
+    const adjustedMarkers = adjustMarkersForPadding(
+      params.personMarkers,
+      origW,
+      origH,
+      squareSize,
+      padLeft,
+      padTop
+    );
+    
     // Parts Array aufbauen - REIHENFOLGE IST WICHTIG!
     // 1. Prompt (Text)
-    // 2. Hintergrundbild (Image 1 im Prompt)
+    // 2. Hintergrundbild (Image 1 im Prompt) - QUADRATISCH GEPADDET
     // 3. Person 1 Bild (Image 2 im Prompt)
     // 4. Person 2 Bild (Image 3 im Prompt)
     // usw.
     const parts: GeminiRequestPart[] = [];
     
-    // 1. Prompt hinzufügen - beschreibt welches Bild was ist und das Aspect Ratio
+    // 1. Prompt hinzufügen - mit angepassten Markern für das quadratische Bild
+    // Wichtig: Wir sagen Gemini dass es ein 1:1 Bild ist
     const prompt = params.prompt || buildPersonPlacementPrompt(
-      params.personMarkers, 
-      backgroundWidth, 
-      backgroundHeight
+      adjustedMarkers, 
+      squareSize, // Quadratisch!
+      squareSize
     );
     parts.push({ text: prompt });
     
-    console.log(`Building prompt with background size: ${backgroundWidth}x${backgroundHeight}`);
+    console.log(`Building prompt with SQUARE padded background: ${squareSize}x${squareSize}`);
     
-    // 2. Hintergrundbild hinzufügen (= Image 1 im Prompt)
-    const backgroundBase64 = await urlToBase64(params.backgroundImage);
-    const backgroundMimeType = detectMimeType(params.backgroundImage);
+    // 2. Gepaddetes Hintergrundbild hinzufügen (= Image 1 im Prompt)
     parts.push({
       inline_data: {
-        mime_type: backgroundMimeType,
-        data: backgroundBase64
+        mime_type: 'image/jpeg',
+        data: paddedBackgroundBase64
       }
     });
     
@@ -587,32 +665,24 @@ export async function generateImageWithPersons(
     }
 
     // ============================================
-    // SCHRITT 3: Bild auf korrektes Aspect Ratio resizen
+    // SCHRITT 3: Padding entfernen - zurück auf Original-Format croppen
     // ============================================
     let finalImage = currentImage;
     let finalMimeType = currentMimeType;
 
-    if (backgroundWidth && backgroundHeight) {
-      console.log(`Resizing to target aspect ratio: ${backgroundWidth}x${backgroundHeight}`);
-      
-      // Skaliere auf max 2048px an der längsten Seite, behalte Aspect Ratio
-      const maxSize = 2048;
-      let targetW, targetH;
-      
-      if (backgroundWidth > backgroundHeight) {
-        targetW = Math.min(backgroundWidth, maxSize);
-        targetH = Math.round((backgroundHeight / backgroundWidth) * targetW);
-      } else {
-        targetH = Math.min(backgroundHeight, maxSize);
-        targetW = Math.round((backgroundWidth / backgroundHeight) * targetH);
-      }
-      
-      const resized = await resizeImageToAspectRatio(currentImage, targetW, targetH);
-      finalImage = resized.base64;
-      finalMimeType = resized.mimeType;
-      
-      console.log(`Image resized to ${targetW}x${targetH}`);
-    }
+    console.log(`Removing padding: cropping from ${squareSize}x${squareSize} back to ${origW}x${origH}`);
+    
+    const cropped = await cropFromSquare(
+      currentImage,
+      origW,
+      origH,
+      padLeft,
+      padTop
+    );
+    finalImage = cropped.base64;
+    finalMimeType = cropped.mimeType;
+    
+    console.log(`Final image cropped to original aspect ratio`);
 
     const processingTime = Date.now() - startTime;
     console.log(`Total processing time: ${processingTime}ms`);
@@ -625,9 +695,8 @@ export async function generateImageWithPersons(
         promptUsed: prompt.substring(0, 200) + '...',
         markersCount: params.personMarkers.length,
         processingTime,
-        outputDimensions: backgroundWidth && backgroundHeight 
-          ? `${backgroundWidth}x${backgroundHeight} (resized)`
-          : 'original'
+        paddedSize: `${squareSize}x${squareSize}`,
+        outputDimensions: `${origW}x${origH} (original aspect ratio restored)`
       }
     };
 
