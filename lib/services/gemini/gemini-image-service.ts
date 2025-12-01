@@ -13,7 +13,7 @@ import {
   GeminiResponse
 } from './types';
 
-const IMAGE_MODEL_ID = 'gemini-2.0-flash-preview-image-generation';
+const IMAGE_MODEL_ID = 'gemini-3-pro-image-preview';
 const API_BASE = 'https://generativelanguage.googleapis.com/v1beta';
 
 /**
@@ -167,8 +167,11 @@ export async function generateImageWithPersons(
       body: JSON.stringify({
         contents: [{ parts }],
         generationConfig: {
-          response_modalities: ["IMAGE", "TEXT"],
+          response_modalities: ["image"],
           temperature: 1.0,
+          imageConfig: {
+            imageSize: imageQuality
+          }
         }
       })
     });
@@ -275,8 +278,11 @@ export async function generateImageFromPrompt(
       body: JSON.stringify({
         contents: [{ parts }],
         generationConfig: {
-          response_modalities: ["IMAGE", "TEXT"],
+          response_modalities: ["image"],
           temperature: 1.0,
+          imageConfig: {
+            imageSize: imageQuality
+          }
         }
       })
     });
