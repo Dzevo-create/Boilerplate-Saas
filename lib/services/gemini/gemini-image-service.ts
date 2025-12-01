@@ -154,44 +154,75 @@ async function performFaceSwap(
 ): Promise<{ success: boolean; imageBase64?: string; mimeType?: string; error?: string }> {
   
   const faceSwapPrompt = `
-###############################################################
-############## FACE SWAP - CRITICAL INSTRUCTION ###############
-###############################################################
+#################################################################
+################### FACE TRANSPLANT OPERATION ###################
+#################################################################
 
-You are performing a FACE SWAP operation.
+THIS IS A MEDICAL-PRECISION FACE TRANSPLANT. NOT A CREATIVE TASK.
 
-Image 1: A photograph with a person in it (the scene to keep)
-Image 2: A reference photo showing the EXACT face to use
+You have TWO images:
+- IMAGE 1: Scene with a person (KEEP EVERYTHING except the face)
+- IMAGE 2: The DONOR FACE (COPY THIS FACE EXACTLY - pixel by pixel)
 
-MANDATORY - OUTPUT DIMENSIONS:
-- Your output MUST have the EXACT SAME dimensions as Image 1
-- DO NOT change the aspect ratio
-- DO NOT crop or resize the image
-- Keep the full scene from Image 1
+#################################################################
+################### ABSOLUTE REQUIREMENTS #######################
+#################################################################
 
-YOUR TASK:
-Replace the face of the person in Image 1 with the EXACT face from Image 2.
+STEP 1: ANALYZE the donor face in Image 2
+- Study EVERY detail: exact eye shape, iris color, pupil size
+- Study the EXACT nose shape - every curve, nostril shape, bridge width
+- Study the EXACT lip shape - thickness, color, cupid's bow
+- Study the EXACT jawline angle, chin shape, cheekbone position
+- Study ALL skin details: texture, pores, any moles, freckles, scars
+- Study facial hair if present: exact pattern, density, color
+- Study eyebrow shape: exact arch, thickness, hair direction
 
-CRITICAL FACE REQUIREMENTS:
-1. The face MUST be 100% IDENTICAL to Image 2
-2. Copy EVERY facial detail: 
-   - Exact eye shape, eye color, eyebrow shape
-   - Exact nose shape (including any nose rings/piercings)
-   - Exact lip shape and color
-   - Exact jawline and chin shape
-   - Exact skin texture, tone, and any imperfections
-   - Any visible earrings, piercings, moles, freckles
-3. DO NOT beautify, smooth, or idealize the face
-4. DO NOT change ANY facial features
-5. The person must be IMMEDIATELY RECOGNIZABLE as the person in Image 2
+STEP 2: TRANSPLANT the face onto Image 1
+- The face MUST be a CLONE of Image 2 - not similar, IDENTICAL
+- This is like cutting out the face from Image 2 and pasting it
+- Adjust ONLY the lighting angle to match the scene
+- Adjust ONLY the head rotation to match the body pose
 
-PRESERVE FROM IMAGE 1 (DO NOT CHANGE):
-- The entire scene/background - KEEP EXACTLY
-- The body pose and clothing - KEEP EXACTLY
-- The image dimensions and aspect ratio - KEEP EXACTLY
-- Adjust face lighting to match the scene
+#################################################################
+################### FORBIDDEN ACTIONS ###########################
+#################################################################
 
-OUTPUT: Image 1 with ONLY the face replaced. Everything else stays identical.
+YOU ARE STRICTLY FORBIDDEN FROM:
+❌ Making the face "prettier" or more attractive
+❌ Smoothing skin or removing imperfections
+❌ Changing eye color or shape even slightly
+❌ Making the nose smaller or more symmetrical
+❌ Making lips fuller or thinner
+❌ Changing the jawline shape
+❌ Adding or removing facial hair
+❌ Changing hair color or style
+❌ Making the person look younger or older
+❌ "Improving" or "enhancing" ANY facial feature
+❌ Using your "ideal" of how a face should look
+❌ Any creative interpretation of the face
+
+#################################################################
+################### QUALITY CHECK ###############################
+#################################################################
+
+Before outputting, verify:
+✓ Would the person in Image 2 recognize themselves IMMEDIATELY?
+✓ Are ALL facial features EXACTLY the same as Image 2?
+✓ Did you preserve every imperfection from Image 2?
+✓ Is this a TRUE copy, not an interpretation?
+
+If the answer to ANY of these is NO, redo the face transplant.
+
+#################################################################
+################### OUTPUT REQUIREMENTS #########################
+#################################################################
+
+- Keep Image 1 dimensions EXACTLY (do not crop or resize)
+- Keep the entire background and body from Image 1
+- ONLY replace the face with an EXACT copy from Image 2
+- Match face lighting to scene, but keep all features identical
+
+OUTPUT: Image 1 with face surgically replaced by EXACT copy of Image 2's face.
 `;
 
   const parts: GeminiRequestPart[] = [
@@ -203,6 +234,7 @@ OUTPUT: Image 1 with ONLY the face replaced. Everything else stays identical.
   const apiUrl = `${API_BASE}/models/${IMAGE_MODEL_ID}:generateContent?key=${apiKey}`;
   
   try {
+    // Temperatur auf 0 für maximale Konsistenz (weniger "kreativ")
     const response = await fetch(apiUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -210,7 +242,7 @@ OUTPUT: Image 1 with ONLY the face replaced. Everything else stays identical.
         contents: [{ parts }],
         generationConfig: {
           response_modalities: ["image"],
-          temperature: 1.0,
+          temperature: 0.2, // Niedrig für konsistente, nicht-kreative Ergebnisse
           imageConfig: { imageSize: imageQuality }
         }
       })
