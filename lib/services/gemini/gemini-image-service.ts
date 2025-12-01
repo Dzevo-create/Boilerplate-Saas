@@ -49,12 +49,14 @@ function detectMimeType(base64OrUrl: string): string {
 
 /**
  * Baut den Prompt für die Personenplatzierung
- * Mit präzisen Koordinaten und Face Preservation
+ * - Gesicht 1:1 aus Referenzbild übernehmen
+ * - Körper passend zur Szene generieren
+ * - Präzise Positionierung
  */
 function buildPersonPlacementPrompt(markers: PersonMarker[]): string {
   const totalPersons = markers.length;
   
-  // Detaillierte Beschreibung für jede Person mit exakten Koordinaten
+  // Detaillierte Beschreibung für jede Person
   const markerDescriptions = markers.map((marker, index) => {
     const imageNumber = index + 2; // +2 weil Bild 1 das Hintergrundbild ist
     const xPercent = Math.round(marker.x * 100);
@@ -62,52 +64,71 @@ function buildPersonPlacementPrompt(markers: PersonMarker[]): string {
     const widthPercent = Math.round(marker.width * 100);
     const heightPercent = Math.round(marker.height * 100);
     
+    // Bestimme ob ganzer Körper oder nur Oberkörper basierend auf Bounding Box
+    const bodyType = heightPercent > 50 ? 'full body standing' : 
+                     heightPercent > 30 ? 'three-quarter body (waist up)' : 
+                     'upper body (chest up)';
+    
     return `
-PERSON ${index + 1} (Reference: Image ${imageNumber} - the ${getOrdinal(imageNumber)} image provided):
-- EXACT POSITION: Place person's center at ${xPercent}% from left edge, ${yPercent}% from top edge
-- BOUNDING BOX: Person should fill approximately ${widthPercent}% width × ${heightPercent}% height of the image
-- FACE: MUST be 100% IDENTICAL to Image ${imageNumber} - copy EXACT facial features`;
+PERSON ${index + 1}:
+- FACE SOURCE: Use the EXACT face from Image ${imageNumber} (the ${getOrdinal(imageNumber)} image)
+- POSITION: Center of person at X=${xPercent}% from left, Y=${yPercent}% from top of the image
+- SIZE: Person fills area of ${widthPercent}% width × ${heightPercent}% height
+- BODY: Generate ${bodyType} - the reference may only show face/portrait, but GENERATE appropriate body
+- The person should be naturally posed, fitting the scene context`;
   }).join('\n');
 
   return `
 ###############################################################
-###### CRITICAL INSTRUCTION - FACE PRESERVATION ######
+########## ABSOLUTE PRIORITY - FACE IDENTITY ##########
 ###############################################################
 
-THIS IS THE HIGHEST PRIORITY - VIOLATION IS NOT ACCEPTABLE:
+CRITICAL - THIS MUST NOT BE IGNORED:
 
-For EACH person being placed:
-- The face MUST be 100% IDENTICAL to their reference image
-- COPY the EXACT face: eyes, nose, mouth, chin, jawline, cheekbones, skin texture, skin color
-- The person MUST be IMMEDIATELY RECOGNIZABLE as the same person
-- DO NOT modify, beautify, smooth, or alter ANY facial features
-- DO NOT change: eye shape, eye color, nose shape, lip shape, face structure, skin tone
-- Keep natural skin texture - no airbrushing or smoothing
-- Expression may change slightly, but facial STRUCTURE must be IDENTICAL
+The reference images (Image 2, 3, etc.) show the FACES to use.
+- EXTRACT the EXACT face from each reference image
+- The generated person MUST have the IDENTICAL face - 100% recognizable
+- Copy EXACTLY: eyes, nose, mouth, chin, jawline, cheekbones, skin texture, skin color
+- DO NOT modify, beautify, or alter ANY facial features whatsoever
+- The person in the output MUST look like the SAME PERSON as in the reference
+
+IMPORTANT: The reference image might only be a portrait/headshot.
+You must GENERATE an appropriate body for the scene - but the FACE stays identical.
 
 ###############################################################
 
-TASK: Create a photorealistic composite image
+TASK: Generate a new image with people placed into a background scene
+
+CONCEPT:
+- Take the background scene (Image 1) 
+- Generate ${totalPersons} ${totalPersons === 1 ? 'person' : 'people'} INTO the scene at specific positions
+- Each person's FACE comes from their reference image
+- Each person's BODY is generated to fit naturally in the scene
+- This is NOT a copy-paste - generate the person naturally standing/sitting in the scene
 
 INPUT IMAGES:
-- Image 1 (FIRST image): Background/Scene - this is where people will be placed
-${markers.map((_, i) => `- Image ${i + 2} (${getOrdinal(i + 2)} image): Reference photo for Person ${i + 1}`).join('\n')}
+- Image 1 (FIRST image): The background scene - PRESERVE this exactly, same aspect ratio
+${markers.map((_, i) => `- Image ${i + 2}: Face reference for Person ${i + 1} - use this EXACT face`).join('\n')}
 
-PLACEMENT INSTRUCTIONS:
+PERSON PLACEMENT:
 ${markerDescriptions}
 
-COMPOSITION REQUIREMENTS:
-1. KEEP the background scene (Image 1) EXACTLY as provided - do not alter it
-2. Place ${totalPersons} ${totalPersons === 1 ? 'person' : 'people'} at their EXACT specified positions
-3. Each person's face MUST match their reference image PERFECTLY
-4. Scale each person to fit their designated bounding box naturally
-5. Match lighting, shadows, and color temperature to the background scene
-6. Ensure natural integration - people should look like they belong in the scene
-7. Full body or appropriate crop based on the bounding box size
+GENERATION RULES:
+1. OUTPUT must have the SAME ASPECT RATIO as the background image (Image 1)
+2. PRESERVE the background scene exactly - do not alter the environment
+3. GENERATE each person naturally positioned at their specified location
+4. Each person's FACE must be 100% IDENTICAL to their reference - this is non-negotiable
+5. GENERATE appropriate body, clothing, and pose that fits the scene
+6. If reference only shows face/portrait → generate full/partial body as needed
+7. Match lighting, shadows, perspective to the background scene
+8. People should look like they naturally belong in the scene
+9. Proper scale - people should be realistically sized for the environment
 
-OUTPUT: Single photorealistic image with ${totalPersons} ${totalPersons === 1 ? 'person' : 'people'} naturally composited into the background.
-Each person's identity must be preserved 100% - they must be recognizable.
-Professional quality, seamless integration, natural lighting.
+OUTPUT: A single photorealistic image.
+- Same aspect ratio as background
+- ${totalPersons} ${totalPersons === 1 ? 'person' : 'people'} naturally integrated into the scene
+- Each person is 100% recognizable from their reference face
+- Professional quality, seamless integration
 `;
 }
 
